@@ -13,7 +13,7 @@ namespace Loans.API.Data
 
         public DbSet<BranchOffice> BranchOffices { get; set; }
 
-        public DbSet<Country> City { get; set; }
+        public DbSet<City> Cities { get; set; }
 
         public DbSet<Country> Countries { get; set; }
 
