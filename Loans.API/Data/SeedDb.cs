@@ -1,14 +1,19 @@
-﻿using Loans.Shared.Entities;
+﻿using Loans.API.Services;
+using Loans.Shared.Entities;
+using Loans.Shared.Responses;
+using Microsoft.EntityFrameworkCore;
 
 namespace Loans.API.Data
 {
     public class SeedDb
     {
         private readonly DataContext _context;
+        private readonly IApiService _apiService;
 
-        public SeedDb(DataContext context)
+        public SeedDb(DataContext context, IApiService apiService)
         {
             _context = context;
+            _apiService = apiService;
         }
 
         public async Task SeedAsync()
@@ -21,79 +26,61 @@ namespace Loans.API.Data
         {
             if (!_context.Countries.Any())
             {
-                _context.Countries.Add(new Country
+                Response responseCountries = await _apiService.GetListAsync<CountryResponse>("/v1", "/countries");
+                if (responseCountries.IsSuccess)
                 {
-                    Name = "Colombia",
-                    States = new List<State>()
+                    List<CountryResponse> countries = (List<CountryResponse>)responseCountries.Result!;
+                    foreach (CountryResponse countryResponse in countries)
                     {
-                        new State()
+                        Country country = await _context.Countries!.FirstOrDefaultAsync(c => c.Name == countryResponse.Name!)!;
+                        if (country == null)
                         {
-                            Name= "Antioquia",
-                            Cities= new List<City>()
+                            country = new() { Name = countryResponse.Name!, States = new List<State>() };
+                            Response responseStates = await _apiService.GetListAsync<StateResponse>("/v1", $"/countries/{countryResponse.Iso2}/states");
+                            if (responseStates.IsSuccess)
                             {
-                                new City(){Name = "Medellin"},
-                                new City(){Name = "Bello"},
-                                new City(){Name = "Copacabana"},
-                                new City(){Name = "Rionegro"},
-                                new City(){Name = "Envigado"},
+                                List<StateResponse> states = (List<StateResponse>)responseStates.Result!;
+                                foreach (StateResponse stateResponse in states!)
+                                {
+                                    State state = country.States!.FirstOrDefault(s => s.Name == stateResponse.Name!)!;
+                                    if (state == null)
+                                    {
+                                        state = new() { Name = stateResponse.Name!, Cities = new List<City>() };
+                                        Response responseCities = await _apiService.GetListAsync<CityResponse>("/v1", $"/countries/{countryResponse.Iso2}/states/{stateResponse.Iso2}/cities");
+                                        if (responseCities.IsSuccess)
+                                        {
+                                            List<CityResponse> cities = (List<CityResponse>)responseCities.Result!;
+                                            foreach (CityResponse cityResponse in cities)
+                                            {
+                                                if (cityResponse.Name == "Mosfellsbær" || cityResponse.Name == "Șăulița")
+                                                {
+                                                    continue;
+                                                }
+                                                City city = state.Cities!.FirstOrDefault(c => c.Name == cityResponse.Name!)!;
+                                                if (city == null)
+                                                {
+                                                    state.Cities.Add(new City() { Name = cityResponse.Name! });
+                                                }
+                                            }
+                                        }
+                                        if (state.CitiesNumber > 0)
+                                        {
+                                            country.States.Add(state);
+                                        }
+                                    }
+                                }
                             }
-                        },
-                        new State ()
-                        {
-                            Name="Bogota",
-                            Cities= new List<City>()
+                            if (country.StatesNumber > 0)
                             {
-                                new City() {Name="Usaquen"},
-                                new City() {Name="Champinero"},
-                                new City() {Name="Santa fe"},
-                                new City() {Name="Useme"},
-                                new City() {Name="Bosa"},
-                            }
-                        },
-                    }
-                });
-                _context.Countries.Add(new Country 
-                { 
-                    Name = "Perú" ,
-                    States= new List<State>()
-                    {
-                        new State()
-                        {
-                            Name="Lima",
-                            Cities= new List<City>() 
-                            {
-                                new City() { Name="Cercado de Lima"},
-                                new City() { Name="Breña"},
-                                new City() { Name="Comas"},
-                                new City() { Name="Lurigancho Chosica"},
-                                new City() { Name="Vitarte"},
-                                new City() { Name="El Agustino"},
-                                new City() { Name="Lima"},
-                            }
-                        },
-                        new State()
-                        {
-                            Name="Ayacucho",
-                            Cities= new List<City>()
-                            {
-                                new City() { Name="Huamanga"},
-                                new City() { Name="Huanta" },
-                                new City() { Name="Cangallo"},
+                                _context.Countries.Add(country);
+                                await _context.SaveChangesAsync();
                             }
                         }
                     }
-                });
-
-                _context.Countries.Add(new Country { Name = "México" });
-                _context.Countries.Add(new Country { Name = "Argentina" });
-                _context.Countries.Add(new Country { Name = "Brazil" });
-                _context.Countries.Add(new Country { Name = "Chile" });
-                _context.Countries.Add(new Country { Name = "Bolivia" });
-                _context.Countries.Add(new Country { Name = "Venezuela" });
-                _context.Countries.Add(new Country { Name = "Replubica Dominicana" });
-                await _context.SaveChangesAsync();
+                }
             }
+
         }
-    }
+    }    
 }
 
